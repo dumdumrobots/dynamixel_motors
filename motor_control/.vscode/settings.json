@@ -1,0 +1,14 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/joacorn/jonas_ws/devel/lib/python3/dist-packages",
+        "/home/joacorn/surg_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/joacorn/robo_ws/src/rbdl/build/python"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/joacorn/jonas_ws/devel/lib/python3/dist-packages",
+        "/home/joacorn/surg_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/home/joacorn/robo_ws/src/rbdl/build/python"
+    ]
+}

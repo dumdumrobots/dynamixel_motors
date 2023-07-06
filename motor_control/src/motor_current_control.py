@@ -4,7 +4,7 @@
 import os,rospy
 import numpy as np
 
-from std_msgs.msg import Int32MultiArray, Bool
+from std_msgs.msg import Int32MultiArray, Float64MultiArray
 from dynamixel_sdk import *
 
 
@@ -62,9 +62,6 @@ class Robot(object):
     packetHandler = PacketHandler(PROT_VR)
 
     # --- Sync write and read instances
-    #pwm_groupSyncWrite = GroupSyncWrite(portHandler, packetHandler, ADDR_GOAL_PWM, LEN_GOAL_PWM)
-    #pwm_groupSyncRead = GroupSyncRead(portHandler, packetHandler, ADDR_PRESENT_PWM, LEN_PRESENT_PWM)
-
     curr_groupSyncWrite = GroupSyncWrite(portHandler, packetHandler, ADDR_GOAL_CURR, LEN_GOAL_CURR)
     curr_groupSyncRead = GroupSyncRead(portHandler, packetHandler, ADDR_PRESENT_CURR, LEN_PRESENT_CURR)
 
@@ -92,11 +89,11 @@ class Robot(object):
 
 
         # --- ROS COMMS
-        self.currSubscriber = rospy.Subscriber("curr_goal_value",Int32MultiArray, self.update_goal_current)
-        rospy.sleep(0.005) #pwm_goal_value
+        self.currSubscriber = rospy.Subscriber("curr_goal_value",Float64MultiArray, self.update_goal_current)
+        rospy.sleep(0.005)
 
-        self.currPublisher = rospy.Publisher("curr_present_value",Int32MultiArray, queue_size=10)
-        rospy.sleep(0.005) #pos_goal_value
+        self.currPublisher = rospy.Publisher("curr_present_value",Float64MultiArray, queue_size=10)
+        rospy.sleep(0.005)
 
 
         # --- Set up Servomotors 
@@ -104,7 +101,7 @@ class Robot(object):
 
             dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, ID, self.ADDR_LED_EN, True)
             
-            # --- Define Current Control / 0~1193 at 2.69mA per unit
+            # --- Define Current Control / 0~1193 at 2.69mA per unit /125 == 336.25 mA
             dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, ID, self.ADDR_OP_MODE, 0)
             dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, ID, self.ADDR_CURR_LIMIT, 125) 
 
@@ -130,10 +127,10 @@ class Robot(object):
 
     def update_goal_current(self,msg):
 
-        data_array = msg.data # --- Int32MultiArray data
+        data_array = np.array(msg.data) * 1000/2.69 # --- Float64MultiArray
 
         if len(data_array) == len(self.DXL_ID):
-            self.current_desired = np.array(data_array)
+            self.current_desired = data_array.astype(int)
 
         else:
             print("Invalid Current array, try again.\n")
@@ -142,8 +139,8 @@ class Robot(object):
 
     def publish_present_current(self):
 
-        pub_array = Int32MultiArray()
-        pub_array.data = self.DXL_current_present.tolist()
+        pub_array = Float64MultiArray()
+        pub_array.data = (self.DXL_current_present * 2.69/1000.0).tolist()
 
         self.currPublisher.publish(pub_array)
     
@@ -163,7 +160,8 @@ class Robot(object):
                 self.shutdown()
 
             else: 
-                print("Goal Current set to Motor ID: " + str(ID) + " to " + str(self.current_desired[ID] * 2.69) + "mA." + "\n")
+                pass
+                #print("Goal Current set to Motor ID: " + str(ID) + " to " + str(self.current_desired[ID] * 2.69) + "mA." + "\n")
 
 
         dxl_comm_result = self.curr_groupSyncWrite.txPacket()
@@ -223,7 +221,7 @@ class Robot(object):
 
 def main():
 
-    rospy.init_node("pwm_node")
+    rospy.init_node("current_node")
     freq = 10
     rate = rospy.Rate(freq)
 

@@ -35,6 +35,9 @@ class Robot(object):
     current_desired = np.array([0,0,0,0,0]) # --- Desired Current
     DXL_current_present = np.array([0,0,0,0,0]) # --- Present Current
 
+    DXL_position_present = np.array([2048,2048,2048,2048,2048]) # --- Present Position
+
+
     # --- General Variables
     DXL_ID = np.array([0,1,2,3,4])
 
@@ -48,9 +51,12 @@ class Robot(object):
     ADDR_GOAL_CURR = 102
     ADDR_PRESENT_CURR = 126
 
+    ADDR_PRESENT_POS = 132
+
     # --- Byte Length
     LEN_GOAL_CURR = 2
     LEN_PRESENT_CURR = 2
+    LEN_PRESENT_POS = 4
 
 
     # --- General Settings
@@ -64,6 +70,8 @@ class Robot(object):
     # --- Sync write and read instances
     curr_groupSyncWrite = GroupSyncWrite(portHandler, packetHandler, ADDR_GOAL_CURR, LEN_GOAL_CURR)
     curr_groupSyncRead = GroupSyncRead(portHandler, packetHandler, ADDR_PRESENT_CURR, LEN_PRESENT_CURR)
+
+    pos_groupSyncRead = GroupSyncRead(portHandler, packetHandler, ADDR_PRESENT_POS, LEN_PRESENT_POS)
 
 
 
@@ -94,6 +102,9 @@ class Robot(object):
 
         self.currPublisher = rospy.Publisher("curr_present_value",Float64MultiArray, queue_size=10)
         rospy.sleep(0.005)
+
+        self.posPublisher = rospy.Publisher("pos_present_value",Float64MultiArray, queue_size=10)
+        rospy.sleep(0.005) 
 
 
         # --- Set up Servomotors 
@@ -135,6 +146,13 @@ class Robot(object):
         else:
             print("Invalid Current array, try again.\n")
 
+
+    def publish_present_position(self):
+
+        pub_array = Float64MultiArray()
+        pub_array.data = np.round((self.DXL_position_present * 0.088/180 * np.pi - np.pi).tolist(), 2)
+
+        self.posPublisher.publish(pub_array)
 
 
     def publish_present_current(self):
@@ -206,6 +224,37 @@ class Robot(object):
 
 
 
+    def read_present_position(self):
+
+        for ID in self.DXL_ID:
+
+            dxl_addparam_result = self.pos_groupSyncRead.addParam(ID)
+
+            if dxl_addparam_result != True:
+                print("Failed setup for Motor ID: " + str(ID) + ". groupSyncRead addparam failed.\n")
+                self.shutdown()
+
+        dxl_comm_result = self.pos_groupSyncRead.txRxPacket()
+
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            print("Failed to group read Present Position.\n")
+            self.shutdown()
+
+        for ID in self.DXL_ID:
+
+            dxl_getdata_result = self.pos_groupSyncRead.isAvailable(ID, self.ADDR_PRESENT_POS, self.LEN_PRESENT_POS)
+
+            if dxl_getdata_result != True:
+                print("Failed to read Present Position from Motor ID: " + str(ID) + ". groupSyncRead getdata failed.\n")
+                self.shutdown()
+
+            self.DXL_position_present[ID] = self.pos_groupSyncRead.getData(ID, self.ADDR_PRESENT_POS, self.LEN_PRESENT_POS)
+
+        self.pos_groupSyncRead.clearParam()
+
+
+
     def shutdown(self):
 
         for ID in self.DXL_ID:
@@ -230,7 +279,11 @@ def main():
     while not rospy.is_shutdown():
 
         robot.set_goal_current()
+
         robot.read_present_current()
+        robot.read_present_position()
+
+        robot.publish_present_position()
         robot.publish_present_current()
 
     rospy.on_shutdown(robot.shutdown())
